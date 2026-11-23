@@ -11,6 +11,7 @@ from pydantic import TypeAdapter
 
 from litellm._logging import verbose_proxy_logger
 from litellm.constants import NON_LLM_CONNECTION_TIMEOUT
+from litellm.homelab_fork import homelab_unlimited
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
 if TYPE_CHECKING:
@@ -21,6 +22,19 @@ AUTO_ROUTER_LICENSE_FEATURE: Final = "auto_router"
 LICENSE_ALL_FEATURES: Final = "*"
 AUTO_ROUTER_LICENSE_REMEDY: Final = "A LiteLLM license with the 'auto_router' feature lifts the limit."
 _LICENSE_VERDICT: Final = TypeAdapter(object)
+
+
+def _homelab_license_data() -> "EnterpriseLicenseData":
+    """Unlimited, feature-complete licence data for the homelab deployment.
+
+    A missing ``max_users``/``max_teams`` means no seat cap, and the ``*``
+    feature grants every gated capability (including auto-router).
+    """
+    return {
+        "expiration_date": "2099-12-31",
+        "user_id": "homelab",
+        "allowed_features": [LICENSE_ALL_FEATURES],
+    }
 
 
 class LicenseCheck:
@@ -38,7 +52,9 @@ class LicenseCheck:
         self._premium_check_logged = False
         self.public_key = None
         self.read_public_key()
-        self.airgapped_license_data: EnterpriseLicenseData | None = None
+        self.airgapped_license_data: EnterpriseLicenseData | None = (
+            _homelab_license_data() if homelab_unlimited() else None
+        )
 
     def read_public_key(self):
         try:
@@ -103,6 +119,16 @@ class LicenseCheck:
         2. _verify: checks if license is valid calling litellm API. This is the old way we were generating/validating license
         """
         try:
+            if homelab_unlimited():
+                # Self-hosted homelab: never verify or expire a licence.
+                if not self._premium_check_logged:
+                    verbose_proxy_logger.debug(
+                        "litellm.proxy.auth.litellm_license.py::is_premium() - homelab unlimited licence mode"
+                    )
+                    self._premium_check_logged = True
+                self.airgapped_license_data = _homelab_license_data()
+                return True
+
             if not self._premium_check_logged:
                 verbose_proxy_logger.debug(
                     "litellm.proxy.auth.litellm_license.py::is_premium() - ENTERING 'IS_PREMIUM' - License configured: %s",

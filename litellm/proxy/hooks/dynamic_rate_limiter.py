@@ -13,6 +13,7 @@ from litellm._internal_context import with_service_target
 from litellm._logging import verbose_proxy_logger
 from litellm.caching.caching import DualCache
 from litellm.exceptions import RateLimitType
+from litellm.homelab_fork import homelab_unlimited
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.litellm_core_utils.hidden_params import set_hidden_param
 from litellm.proxy._types import UserAPIKeyAuth
@@ -117,7 +118,7 @@ class _PROXY_DynamicRateLimitHandler(CustomLogger):
                     litellm.priority_reservation,
                 )
             elif priority is not None and litellm.priority_reservation is not None:
-                if os.getenv("LITELLM_LICENSE", None) is None:
+                if os.getenv("LITELLM_LICENSE", None) is None and not homelab_unlimited():
                     verbose_proxy_logger.error(
                         "PREMIUM FEATURE: Reserving tpm/rpm by priority is a premium feature. Please add a 'LITELLM_LICENSE' to your .env to enable this.\nGet a license: https://docs.litellm.ai/docs/enterprise."
                     )

@@ -584,6 +584,21 @@ def fake_provider_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(name, value)
 
 
+@pytest.fixture(autouse=True)
+def _upstream_license_enforcement(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep upstream community-licence semantics for the upstream unit tests.
+
+    This fork ships an unlimited licence mode that is on by default. The tests
+    imported from upstream pin what upstream does without a licence, so they run
+    with the switch off. ``tests/unit/proxy/test_homelab_license_unlock.py``
+    removes this variable to exercise the fork's default.
+    """
+    from litellm.homelab_fork import HOMELAB_UNLIMITED_ENV
+
+    monkeypatch.setenv(HOMELAB_UNLIMITED_ENV, "false")
+
+
+
 @pytest.fixture
 async def drained_logging_worker() -> None:
     await asyncio.wait_for(GLOBAL_LOGGING_WORKER.clear_queue(), timeout=10)

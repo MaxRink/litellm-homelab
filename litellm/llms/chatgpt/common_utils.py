@@ -422,3 +422,21 @@ def get_chatgpt_session_id(litellm_params: object) -> str | None:
 
 def ensure_chatgpt_session_id(litellm_params: object) -> str:
     return get_chatgpt_session_id(litellm_params) or str(uuid4())
+
+
+# OpenAI rejects longer prompt_cache_key values; keep the outbound key bounded.
+CHATGPT_PROMPT_CACHE_KEY_MAX_LENGTH: Final = 64
+
+
+def bounded_chatgpt_prompt_cache_key(value: object) -> str | None:
+    """Return a provider-safe prompt_cache_key, hashing values that are too long."""
+    if not isinstance(value, str):
+        return None
+    key: Final = value.strip()
+    if not key:
+        return None
+    if len(key) <= CHATGPT_PROMPT_CACHE_KEY_MAX_LENGTH:
+        return key
+    prefix: Final = "sha256-"
+    digest: Final = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return prefix + digest[: CHATGPT_PROMPT_CACHE_KEY_MAX_LENGTH - len(prefix)]
