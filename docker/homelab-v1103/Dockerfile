@@ -7,12 +7,12 @@
 # below is a file this repository still changes relative to upstream.
 #
 # Build context is the repository root:
-#   docker build -f docker/homelab-v1102/Dockerfile -t litellm-homelab:v1.110.2 .
+#   docker build -f docker/homelab-v1103/Dockerfile -t litellm-homelab:v1.110.3 .
 #
-# Runtime switches (see docs/homelab-fork.md):
+# Runtime switches (see HOMELAB.md):
 #   LITELLM_HOMELAB_UNLIMITED=true   unlimited licence mode (default)
 #   LITELLM_HOMELAB_UNLIMITED=false  restore upstream community enforcement
-ARG BASE_IMAGE=ghcr.io/berriai/litellm:v1.110.2
+ARG BASE_IMAGE=ghcr.io/berriai/litellm:v1.110.3@sha256:1050d2c9ca58399de9cd51df6eb503812af697717f54d2f08c1c30589c75e1f7
 FROM ${BASE_IMAGE}
 
 ARG SITE=/app/.venv/lib/python3.13/site-packages/litellm

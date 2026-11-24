@@ -6,7 +6,7 @@ on:
       tag:
         description: Image tag to publish (defaults to the upstream release)
         required: false
-        default: v1.110.2
+        default: v1.110.3
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/homelab-v1102/Dockerfile
+          file: docker/homelab-v1103/Dockerfile
           push: true
           provenance: true
           sbom: true

@@ -16,6 +16,7 @@ import pytest
 
 import litellm
 from litellm.llms.chatgpt.authenticator import Authenticator
+from litellm.llms.chatgpt.common_utils import bounded_chatgpt_prompt_cache_key
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 from litellm.llms.chatgpt.responses.transformation import ChatGPTResponsesAPIConfig
 from litellm.llms.openai.common_utils import OpenAIError
@@ -763,3 +764,95 @@ def test_non_stream_chat_cut_off_by_max_tokens_returns_the_partial_answer() -> N
 
     assert response.choices[0].finish_reason == "length"
     assert response.choices[0].message.content == '{"capitals": ["Paris", "Ber'
+
+
+# Homelab fork: upstream derives the ChatGPT session_id from prompt_cache_key but
+# drops the key from the request body; the fork forwards it, bounded to 64 chars.
+def _transform_body(optional: dict) -> dict:
+    return ChatGPTResponsesAPIConfig().transform_responses_api_request(
+        model="chatgpt/gpt-6.1-sol",
+        input="hi",
+        response_api_optional_request_params=optional,
+        litellm_params=GenericLiteLLMParams(litellm_call_id="call-1"),
+        headers={},
+    )
+
+
+def test_homelab_prompt_cache_key_is_forwarded() -> None:
+    request: Final = _transform_body({"prompt_cache_key": "hermes-session-1", "store": True})
+
+    assert request["prompt_cache_key"] == "hermes-session-1"
+    assert request["store"] is False
+
+
+@pytest.mark.parametrize("value", [None, "", "   ", 123, {"k": "v"}])
+def test_homelab_invalid_prompt_cache_key_is_dropped(value: object) -> None:
+    assert "prompt_cache_key" not in _transform_body({"prompt_cache_key": value})
+
+
+def test_homelab_long_prompt_cache_key_is_bounded_and_stable() -> None:
+    long_key: Final = "x" * 500
+    bounded: Final = bounded_chatgpt_prompt_cache_key(long_key)
+
+    assert bounded is not None
+    assert len(bounded) == 64
+    assert bounded.startswith("sha256-")
+    assert bounded == bounded_chatgpt_prompt_cache_key(long_key)
+    assert bounded != bounded_chatgpt_prompt_cache_key("y" * 500)
+    assert bounded_chatgpt_prompt_cache_key("k" * 64) == "k" * 64
+    assert _transform_body({"prompt_cache_key": long_key})["prompt_cache_key"] == bounded
+
+
+@patch.multiple(
+    "litellm.llms.chatgpt.authenticator.Authenticator",
+    get_access_token=MagicMock(return_value="access-123"),
+    get_account_id=MagicMock(return_value="acct-123"),
+    get_api_base=MagicMock(return_value=None),
+)
+def test_homelab_wire_request_carries_key_and_stable_session() -> None:
+    completed: Final = {
+        "type": "response.completed",
+        "response": {
+            "id": "resp_1",
+            "object": "response",
+            "created_at": 1700000000,
+            "status": "completed",
+            "model": "gpt-6.1-sol",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "OK", "annotations": []}],
+                }
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 1, "total_tokens": 11},
+        },
+    }
+    sent: Final[list[tuple[dict, dict]]] = []
+
+    def fake_post(*_args: object, **kwargs: object) -> httpx.Response:
+        sent.append((dict(kwargs["headers"]), dict(kwargs["json"])))
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=f"data: {json.dumps(completed)}\n\n".encode(),
+            request=httpx.Request("POST", "https://chatgpt.example.com/responses"),
+        )
+
+    client: Final = HTTPHandler()
+    with patch.object(client, "post", side_effect=fake_post):
+        for _ in range(2):
+            litellm.responses(
+                model="chatgpt/gpt-6.1-sol",
+                input="hi",
+                prompt_cache_key="hermes-session-1",
+                client=client,
+            )
+
+    assert len(sent) == 2
+    assert sent[0][0]["session_id"] == sent[1][0]["session_id"]
+    for _headers, body in sent:
+        assert body["prompt_cache_key"] == "hermes-session-1"
+        assert body["store"] is False
