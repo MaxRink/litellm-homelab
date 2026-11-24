@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from pydantic import TypeAdapter
 
+from litellm.homelab_fork import homelab_unlimited
 from litellm.litellm_core_utils.core_helpers import require_attributes
 from litellm.models.user import LiteLLM_UserTable, SCIMPlaceholder
 from litellm.repositories.base_repository import BaseRepository, DbRecord, record_to_dict
@@ -41,6 +42,13 @@ ORDER BY p.user_id
 
 _PLACEHOLDER_ROWS_ADAPTER: Final = TypeAdapter(tuple[SCIMPlaceholder, ...])
 _FREE_SSO_CREATION: Final[ContextVar[tuple[str | None, object] | None]] = ContextVar("free_sso_creation", default=None)
+
+_FREE_SSO_SEAT_LIMIT: Final = 5
+
+
+def _free_sso_seat_limit() -> int | None:
+    """Community SSO seat cap; the homelab fork runs without one."""
+    return None if homelab_unlimited() else _FREE_SSO_SEAT_LIMIT
 
 
 @contextmanager
@@ -189,7 +197,8 @@ class UserRepository(BaseRepository[LiteLLM_UserTable]):
             existing: Final = await transaction.litellm_usertable.find_unique(where={"user_id": data["user_id"]})
             if existing is not None:
                 return existing
-            if await _count_billable_users(transaction.litellm_usertable) >= 5:
+            seat_limit: Final = _free_sso_seat_limit()
+            if seat_limit is not None and await _count_billable_users(transaction.litellm_usertable) >= seat_limit:
                 return None
             return await transaction.litellm_usertable.upsert(
                 where={"user_id": data["user_id"]}, data={"create": dict(data), "update": {}}

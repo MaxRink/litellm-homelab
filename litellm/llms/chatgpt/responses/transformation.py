@@ -32,6 +32,7 @@ from ..authenticator import Authenticator, get_chatgpt_auth_file, resolve_chatgp
 from ..common_utils import (
     CHATGPT_API_BASE,
     GetAccessTokenError,
+    bounded_chatgpt_prompt_cache_key,
     ensure_chatgpt_session_id,
     get_chatgpt_client_credential,
     get_chatgpt_default_headers,
@@ -151,6 +152,9 @@ class ChatGPTResponsesAPIConfig(OpenAIResponsesAPIConfig):
         service_tier: Final = _CHATGPT_SERVICE_TIERS.get(request.get("service_tier"))
         if service_tier is not None:
             filtered["service_tier"] = service_tier
+        prompt_cache_key: Final = bounded_chatgpt_prompt_cache_key(request.get("prompt_cache_key"))
+        if prompt_cache_key is not None:
+            filtered["prompt_cache_key"] = prompt_cache_key
         return filtered
 
     def transform_response_api_response(

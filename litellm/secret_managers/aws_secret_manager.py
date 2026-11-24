@@ -17,6 +17,7 @@ from typing import Any, Final
 from pydantic import TypeAdapter
 
 import litellm
+from litellm.homelab_fork import homelab_unlimited
 from litellm.types.secret_managers.main import KeyManagementSystem
 
 _PARSED_LITERAL: Final = TypeAdapter(object)
@@ -66,6 +67,7 @@ class AWSKeyManagementService_V2:
         if (
             os.getenv("LITELLM_LICENSE", None) is not None
             or os.getenv("LITELLM_SECRET_AWS_KMS_LITELLM_LICENSE", None) is not None
+            or homelab_unlimited()
         ):
             is_litellm_license_in_env = True
         if is_litellm_license_in_env is False:

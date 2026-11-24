@@ -540,7 +540,9 @@ class LLMCachingHandler:
             if new_kwargs.get("metadata") is None:
                 new_kwargs.pop("metadata", None)
             if new_kwargs.get("stream") is True and "cache_key" not in new_kwargs:
-                new_kwargs["cache_key"] = litellm.cache.get_cache_key(**new_kwargs)
+                derived_cache_key = litellm.cache.get_cache_key(**new_kwargs)
+                if derived_cache_key is not None:
+                    new_kwargs["cache_key"] = derived_cache_key
             self.request_kwargs = _drop_logging_obj_from_kwargs(new_kwargs)
             print_verbose("Checking Sync Cache")
             logging_obj.reset_caching_details()
@@ -968,7 +970,9 @@ class LLMCachingHandler:
         if _is_response_cache_excluded(model=model, kwargs=new_kwargs):
             return None
         if new_kwargs.get("stream") is True and "cache_key" not in new_kwargs:
-            new_kwargs["cache_key"] = litellm.cache.get_cache_key(**new_kwargs)
+            derived_cache_key = litellm.cache.get_cache_key(**new_kwargs)
+            if derived_cache_key is not None:
+                new_kwargs["cache_key"] = derived_cache_key
         cached_result: object | None = None
         if call_type == CallTypes.aembedding.value:
             new_kwargs["input"] = self.handle_kwargs_input_list_or_str(new_kwargs)
@@ -993,9 +997,13 @@ class LLMCachingHandler:
             request_kwargs: Final = new_kwargs.copy()
             request_cache_key: Final = _request_cache_key(request_kwargs)
             request_kwargs.pop("cache_key", None)
+            derived_cache_key = litellm.cache.get_cache_key(**request_kwargs)
+            if request_cache_key is None and derived_cache_key is None:
+                self.preset_cache_key = None
+                return None
             if litellm.cache.supports_async() is True:
                 ## check if dual cache is supported ##
-                self.preset_cache_key = request_cache_key or litellm.cache.get_cache_key(**request_kwargs)
+                self.preset_cache_key = request_cache_key or derived_cache_key
                 with response_cache_phase("get"):
                     cached_result = await litellm.cache.async_get_cache(
                         dynamic_cache_object=self.dual_cache,
@@ -1003,7 +1011,7 @@ class LLMCachingHandler:
                         **request_kwargs,
                     )
             else:  # fallback for caches that don't support async
-                self.preset_cache_key = request_cache_key or litellm.cache.get_cache_key(**request_kwargs)
+                self.preset_cache_key = request_cache_key or derived_cache_key
                 with response_cache_phase("get"):
                     cached_result = litellm.cache.get_cache(
                         dynamic_cache_object=self.dual_cache,
