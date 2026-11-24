@@ -73,12 +73,13 @@ parsing) is now upstream and was dropped rather than re-applied.
   the fork's namesake fix: `litellm-cache-fix`.
 - `litellm/llms/chatgpt/common_utils.py`,
   `llms/chatgpt/responses/transformation.py` - `prompt_cache_key` is forwarded
-  to the ChatGPT backend and bounded to 64 characters, with session affinity
-  preserved.
+  to the ChatGPT backend and bounded to 64 characters (upstream derives the
+  `session_id` header from it but drops it from the body).
 - `litellm/mcp_client/tools.py` - malformed MCP tool schemas are reported with
   a bounded, content-free warning instead of failing discovery.
 - `litellm/integrations/opentelemetry.py` - attributes are not set on
-  already-ended spans.
+  already-ended spans, including the routing-decision attributes (that half
+  of the guard was lost in the v1.110.2 port and restored 2026-11-24).
 - `litellm/integrations/prometheus.py` - router fallback callbacks attribute
   proxy callers when metadata arrives in the modern `litellm_params` bucket.
 
@@ -105,6 +106,17 @@ The image sets no environment itself; pass
 `tests/unit/proxy/test_homelab_license_unlock.py` covers both switch
 positions: unlimited by default, and byte-for-byte upstream enforcement when
 disabled.
+
+Fork regression tests (dropped in the v1.110.2 port, restored 2026-11-24):
+caller-scoped cache keys in `tests/unit/caching/test_caching.py` and
+`test_batch_redis_get_cache.py`, the ended-span guard in
+`tests/unit/integrations/test_opentelemetry_ended_span_routing.py` and
+`test_opentelemetry.py`, MCP schema diagnostics in
+`tests/unit/mcp_client/test_tool_schema_observability.py`, and the
+`test_homelab_*` ChatGPT `prompt_cache_key` tests in
+`tests/unit/llms/chatgpt/responses/test_chatgpt_responses_transformation.py`.
+Session affinity from `prompt_cache_key` is upstream behaviour since v1.110
+(`get_chatgpt_session_id`); the fork only forwards the bounded key.
 
 Upstream unit tests run with the switch off (see the autouse fixture in
 `tests/unit/conftest.py`) so their community-licence expectations keep holding.

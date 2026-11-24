@@ -2481,7 +2481,8 @@ class OpenTelemetry(OTELGenAISemconvMixin, CustomLogger):
                     value=safe_dumps(value) if key == KUBERNETES_POD_ROUTING_KEY and value is not None else value,
                 )
             decision: Final = metadata.get("routing_decision")
-            span.set_attributes(routing_decision_attributes(decision))
+            for key, value in routing_decision_attributes(decision).items():
+                self.safe_set_attribute(span=span, key=key, value=value)
 
             # get hidden params
             hidden_params: Final = getattr(standard_logging_payload, "hidden_params", None) or (
